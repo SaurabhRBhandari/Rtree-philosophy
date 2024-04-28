@@ -24,20 +24,21 @@ typedef RStarRemoveSpecificLeaf<Leaf> RemoveSpecificLeaf;
 typedef RStarTree<int, 2, 2, 4> RTree;
 typedef RTree::BoundingBox BoundingBox;
 
-BoundingBox bounds(int x, int y, int w, int h)
+BoundingBox bounds(int x, int y, int c, int w = 0, int h = 0)
 {
 	BoundingBox bb;
-
+	bb.reset();
 	bb.edges[0].first = x;
 	bb.edges[0].second = x + w;
 
 	bb.edges[1].first = y;
 	bb.edges[1].second = y + h;
 
-	bb.n = 1;
-	bb.sum[0] = (x + x + w) / 2.0;
-	bb.sum[1] = (y + y + h) / 2.0;
+	bb.n[c] = 1;
+	bb.sum[0][c] = (x + x + w) / 2.0;
+	bb.sum[1][c] = (y + y + h) / 2.0;
 
+	// sum sq is not classwise
 	bb.sum_sq[0] = (x * x + (x + w) * (x + w)) / 2.0;
 	bb.sum_sq[1] = (y * y + (y + h) * (y + h)) / 2.0;
 
@@ -97,7 +98,7 @@ vector<BoundingBox> getFrontier(int n, RTree tree, vector<Node *> &nodes)
 }
 
 const double PI = 3.14159265358979323846;
-
+// const int classes = 2;
 double gaussian(double x[], double mean[], double var[], int n)
 {
 	double tmp = 1;
@@ -109,21 +110,44 @@ double gaussian(double x[], double mean[], double var[], int n)
 	}
 	return (1.0 / sqrt(pow(2 * PI, n) * tmp)) * exp(sum);
 }
-double pdq(vector<BoundingBox> frontier, BoundingBox query)
+vector<double> pdq(vector<BoundingBox> frontier, BoundingBox query)
 {
 	int N = 0;
-	double pdq = 0;
-	for (auto i : frontier)
+	vector<double> res;
+	for (int c = 0; c < classes; c++)
 	{
-		int n = i.noOfObjects();
-		N += n;
-		double mean[2] = {i.sum[0] / n, i.sum[1] / n};
-		double var[2] = {i.sum_sq[0] / n - mean[0] * mean[0], i.sum_sq[1] / n - mean[1] * mean[1]};
-		double x[2] = {query.sum[0], query.sum[1]};
-		double g = gaussian(x, mean, var, 2);
-		pdq += n * g;
+		double pdq = 0;
+		for (auto i : frontier)
+		{
+			int n = i.n[c];
+			N += n;
+			double mean[2] = {i.sum[0][c] / n, i.sum[1][c] / n};
+			double var[2] = {i.sum_sq[0] / n - mean[0] * mean[0], i.sum_sq[1] / n - mean[1] * mean[1]};
+			double x[2] = {(double)query.edges[0].first, (double)query.edges[1].first};
+			double g = gaussian(x, mean, var, 2);
+			// cout << g << endl;
+			pdq += n * g;
+			// cout << pdq << endl;
+		}
+		if (pdq != pdq)
+			pdq = 0;
+		res.push_back(pdq);
 	}
-	return pdq / N;
+	for (int i = 0; i < classes; i++)
+	{
+		res[i] /= N;
+	}
+	// normalize
+	double sum = 0;
+	for (int i = 0; i < classes; i++)
+	{
+		sum += res[i];
+	}
+	for (int i = 0; i < classes; i++)
+	{
+		res[i] /= sum;
+	}
+	return res;
 }
 
 void advanceFrontier(vector<Node *> &frontier, BoundingBox &query)
@@ -160,18 +184,24 @@ int main()
 	int n;
 	cin >> n;
 	pair<int, int> X_train[n];
-	// int Y_train[n];
+	int Y_train[n];
 	for (int i = 0; i < n; i++)
 	{
-		cin >> X_train[i].first >> X_train[i].second;
-		tree.Insert(i, bounds(X_train[i].first, X_train[i].second, 0, 0));
+		cin >> X_train[i].first >> X_train[i].second >> Y_train[i];
+		tree.Insert(i, bounds(X_train[i].first, X_train[i].second, Y_train[i]));
 	}
 	vector<Node *> frontier;
-	auto query = bounds(-2, -4, 0, 0);
-	// auto query = bounds(2, 4, 0, 0);
-	auto f = getFrontier(1, tree, frontier);
-	// auto f = getFrontier(3, tree, frontier);
-	magenta << pdq(f, query) << endl;
+	// auto query = bounds(-2, -4, 0, 0);
+	auto query = bounds(2, 4, 0, 0);
+	// auto f = getFrontier(1, tree, frontier);
+	auto f = getFrontier(3, tree, frontier);
+	auto g = pdq(f, query);
+	for (auto i : g)
+	{
+		cout << i << " ";
+	}
+	cout << endl;
+	// cout << pdq(f, query) << endl;
 
 	// for (auto i : f)
 	// {
